@@ -15,8 +15,12 @@ namespace SupportReqeustAcceptor.RabbitMQ
 
             var connection = connectionFactory.CreateConnection();
             using var channel = connection.CreateModel();
-
             channel.QueueDeclare("sessions", exclusive: false);
+            /*channel.QueueDeclare(queue: "sessions",
+                            durable: true,
+                            exclusive: false,
+                            autoDelete: false,
+                            arguments: null);*/
 
             var json = JsonConvert.SerializeObject(message);
             var body = Encoding.UTF8.GetBytes(json);
@@ -35,6 +39,12 @@ namespace SupportReqeustAcceptor.RabbitMQ
             using (IModel channel = connection.CreateModel())
             {
                 channel.QueueDeclare("sessions", exclusive: false);
+                /* channel.QueueDeclare(queue: "sessions",
+                             durable: true,
+                             exclusive: false,
+                             autoDelete: false,
+                             arguments: null);*/
+
                 return channel.MessageCount(queueName);
             }
         }

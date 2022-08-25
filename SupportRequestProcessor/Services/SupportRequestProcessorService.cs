@@ -35,7 +35,7 @@ namespace SupportRequestProcessor.Services
             {
                 staffSet = "Shift-2-Staff";
             }
-            else if (currentHourOfDay >= 22 && currentHourOfDay < 6) // Shift 3 - Night Shift (Team C will handle the chat sessions)
+            else if ((currentHourOfDay >= 22 && currentHourOfDay < 24)||(currentHourOfDay >=0 && currentHourOfDay<6)) // Shift 3 - Night Shift (Team C will handle the chat sessions)
             {
                 staffSet = "Shift-3-Staff";
             }

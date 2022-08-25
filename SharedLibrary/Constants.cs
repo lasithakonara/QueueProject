@@ -2,10 +2,7 @@
 {
     public  class Constants
     {
-        public enum SupportReqeustStatus
-        {
-            NOK = 0,
-            OK = 1
-        }
+        public static string SUPPORT_REQUEST_STATUS_OK = "OK";
+        public static string SUPPORT_REQUEST_STATUS_NOK = "NOK";
     }
 }

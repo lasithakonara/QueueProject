@@ -59,11 +59,12 @@ namespace SupportReqeustAcceptor.Services
                 _messagePublisher.SendMessage(supportRequest);
 
                 supportResponse.RequestId = reqeustId;
-                supportResponse.Status = Constants.SupportReqeustStatus.OK;
+                supportResponse.Status = Constants.SUPPORT_REQUEST_STATUS_OK;
             }
             else
             {
-                supportResponse.Status = Constants.SupportReqeustStatus.NOK;
+                _logger.LogError("Cannot add more support reqeusts to the session queue as the queue is full!");
+                supportResponse.Status = Constants.SUPPORT_REQUEST_STATUS_NOK;
             }
 
             return supportResponse;
