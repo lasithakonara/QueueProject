@@ -8,6 +8,6 @@ namespace SupportRequestProcessor.Common
     {
         public Seniority Seniority { get; set; }
         public int RemainingCapacity { get; set; }
-        public List<SupportRequest> SupportRequests { get; set; } = new List<SupportRequest>();
+        public Dictionary<string,SupportRequest> SupportRequests { get; set; } = new Dictionary<string, SupportRequest>();
     }
 }

@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 
 namespace SupportReqeustAcceptor.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
     public class SupportRequestController : ControllerBase
     {
@@ -21,13 +20,27 @@ namespace SupportReqeustAcceptor.Controllers
             _logger = loggerFactory.CreateLogger("SupportRequestController");
         }
 
-        // POST api/<SupportRequestController>
-        [HttpPost]
+        [HttpPost, Route("api/v1/SupportRequest")]
         public async Task<IActionResult> PostAsync([FromBody] SupportRequest supportRequest)
         {
             SupportResponse supportResponse = await _supportRequestService.AddSupportReqeustToQueue(supportRequest);
 
             return Ok(supportResponse);
+        }
+
+        [HttpGet, Route("api/v1/Poll")]
+        public async Task<IActionResult> PollRequest(string requestId)
+        {
+            if (_supportRequestService.UpdatePollRequestAgainstSupportRequest(requestId))
+            {
+                _logger.LogInformation("Polling successful for support request : " + requestId);
+                return Ok();
+            }
+            else
+            {
+                _logger.LogError("Support request : " + requestId + " not found");
+                return NotFound(requestId);
+            }
         }
 
     }

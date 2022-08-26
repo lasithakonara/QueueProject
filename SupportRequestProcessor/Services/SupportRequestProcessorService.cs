@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SharedLibrary;
+using SupportRequestProcessor.Common;
 using System;
 
 namespace SupportRequestProcessor.Services
@@ -16,6 +17,42 @@ namespace SupportRequestProcessor.Services
             _logger = loggerFactory.CreateLogger("SupportRequestProcessorService");
         }
 
+        /// <summary>
+        /// Flags support reqeusts which should be removed from the system as they have stopped polling and lost connection
+        /// The method will either try to remove the currently handling session from the agent or add to a dictionary which
+        /// has all the reqeusts that needs to be skipped from processing when chat agents become available
+        /// </summary>
+        /// <param name="requestId"></param>
+        public void FlagSupportRequestForDeletion(string requestId)
+        {
+            //First we must check whether this support reqeust is currently attended by an agent
+            //If so we must end that session making room for a new session
+            if (CommonVariables.SupportRequestsAssignments.ContainsKey(requestId))
+            {
+                if(CommonVariables.SupportRequestsAssignments[requestId].SupportRequests.ContainsKey(requestId))
+                {
+                    CommonVariables.SupportRequestsAssignments[requestId].SupportRequests.Remove(requestId);
+                    CommonVariables.SupportRequestsAssignments[requestId].RemainingCapacity++;
+                } 
+                CommonVariables.SupportRequestsAssignments.Remove(requestId);
+                _logger.LogInformation("Removing currently processing reqeust from agent as polling has failed : " + requestId);
+                return;
+            }
+
+            //If we cannot find the Request ID in the SupportRequestsAssignments we must add the request Id to SupportRequestsFlaggedForDeletion dictionary 
+            var supportRequestsFlaggedForDeletion = CommonVariables.SupportRequestsFlaggedForDeletion;
+            if (!supportRequestsFlaggedForDeletion.ContainsKey(requestId))
+            {
+                supportRequestsFlaggedForDeletion.Add(requestId, true);
+                _logger.LogInformation("Adding reqeust Id to SupportRequestsFlaggedForDeletion : " + requestId);
+            }
+        }
+
+        /// <summary>
+        /// Retrives the maximum queue length allowed in the RabbitMQ queue
+        /// SupportRequestAcceptor would need this value to decide whether or not to accept any new suppport requests
+        /// </summary>
+        /// <returns></returns>
         public ProcessorDetails GetMaxQueueLength()
         {
             var currentHourOfDay = DateTime.Now.Hour;
@@ -47,7 +84,7 @@ namespace SupportRequestProcessor.Services
             var numberOfSeniorLevelStaffMembers = _configuration.GetValue<int>(staffSet + ":Senior");
             var numberOfTeamLeadStaffMembers = _configuration.GetValue<int>(staffSet + ":TeamLead");
 
-            //If its not an night shift (Here we have assumed that the night shift is from 10PM to 6AM)we consider the overflow staff 
+            //If its not an night shift and if office hours - Shift 1 and 2 (Here we have assumed that the night shift is from 10PM to 6AM)we consider the overflow staff 
             // when calculating the capacity
             if (currentHourOfDay >= 6 && currentHourOfDay < 22)
             {

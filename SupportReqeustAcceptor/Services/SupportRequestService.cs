@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using SharedLibrary;
 using SharedModels;
+using SupportReqeustAcceptor.Common;
 using SupportReqeustAcceptor.RabbitMQ;
 using System;
 using System.Net.Http;
@@ -14,6 +15,7 @@ namespace SupportReqeustAcceptor.Services
         private readonly IMessagePublisher _messagePublisher;
         private readonly ILogger _logger;
         private readonly IHttpClientFactory _httpClientFactory;
+        private int myint = 0; 
         public SupportRequestService(IMessagePublisher messageProducer, ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory)
         {
             _messagePublisher = messageProducer;
@@ -21,6 +23,11 @@ namespace SupportReqeustAcceptor.Services
             _httpClientFactory = httpClientFactory;
         }
 
+        /// <summary>
+        /// Adds new support reqeusts to queue
+        /// </summary>
+        /// <param name="supportRequest"></param>
+        /// <returns></returns>
         public async Task<SupportResponse> AddSupportReqeustToQueue(SupportRequest supportRequest)
         {
             _logger.LogInformation("New incoming support request : " + JsonConvert.SerializeObject(supportRequest));
@@ -30,7 +37,7 @@ namespace SupportReqeustAcceptor.Services
             var httpRequestMessage = new HttpRequestMessage
             {
                 Method = HttpMethod.Get,
-                RequestUri = new Uri("https://localhost:44366/api/Chat/api/v1/maxQueueLength")
+                RequestUri = new Uri("https://localhost:44366/api/v1/MaxQueueLength")
             };
 
             var httpClient = _httpClientFactory.CreateClient("SupportRequestClient");
@@ -60,6 +67,8 @@ namespace SupportReqeustAcceptor.Services
 
                 supportResponse.RequestId = reqeustId;
                 supportResponse.Status = Constants.SUPPORT_REQUEST_STATUS_OK;
+
+                CommonVariables.SupportRequests.Add(reqeustId, DateTime.UtcNow);
             }
             else
             {
@@ -68,6 +77,28 @@ namespace SupportReqeustAcceptor.Services
             }
 
             return supportResponse;
+        }
+
+        /// <summary>
+        /// Update poll requests against each chat session, this will later be used by another 
+        /// background process to mark them as inactive if 3 polling reqeusts failes
+        /// </summary>
+        /// <param name="requestId"></param>
+        /// <returns>Operation success or false status</returns>
+        public bool UpdatePollRequestAgainstSupportRequest(string requestId)
+        {
+            
+            if(CommonVariables.SupportRequests.ContainsKey(requestId))
+            {
+                CommonVariables.SupportRequests[requestId] = DateTime.UtcNow;
+                _logger.LogInformation("Updating polling request for support request ID : "+ requestId + " TimeStamp : "+ CommonVariables.SupportRequests[requestId]);
+                return true;
+            }
+            else
+            {
+                _logger.LogError("No such request ID : " + requestId + " found");
+                return false;
+            }
         }
     }
 }

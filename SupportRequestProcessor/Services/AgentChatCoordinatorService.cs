@@ -38,6 +38,10 @@ namespace SupportRequestProcessor.Services
             _logger = loggerFactory.CreateLogger("AgentChatCoordinatorService");
         }
 
+        /// <summary>
+        /// Retrives the current shift . A day divided into 3 shifts 8 hours apart.
+        /// </summary>
+        /// <returns>Current shift as a string value</returns>
         public string GetCurrentShift()
         {
             string latestShift = String.Empty;
@@ -57,99 +61,22 @@ namespace SupportRequestProcessor.Services
             }
 
             return latestShift;
-        }
+        }     
 
-        /*public ProcessorDetails GetMaxQueueLength()
-        {
-            var currentHourOfDay = DateTime.Now.Hour;
-
-            var efficiencyOfJunior = _configuration.GetValue<double>("StaffEfficiency:Junior");
-            var efficiencyOfMidLevel = _configuration.GetValue<double>("StaffEfficiency:MidLevel");
-            var efficiencyOfSenior = _configuration.GetValue<double>("StaffEfficiency:Senior");
-            var efficiencyOfTeamLead = _configuration.GetValue<double>("StaffEfficiency:TeamLead");
-
-            string staffSet = String.Empty;
-
-            if (currentHourOfDay >= 6 && currentHourOfDay < 14) // Shift 1 (Team A will handle the chat sessions)
-            {
-                staffSet = "Shift-1-Staff";
-            }
-            else if (currentHourOfDay >= 14 && currentHourOfDay < 22) // Shift 2 (Team B will handle the chat sessions)
-            {
-                staffSet = "Shift-2-Staff";
-            }
-            else if (currentHourOfDay >= 22 && currentHourOfDay < 6) // Shift 3 - Night Shift (Team C will handle the chat sessions)
-            {
-                staffSet = "Shift-3-Staff";
-            }
-
-            var maxConcurrency = _configuration.GetValue<int>("MaximumConcurrency");
-
-            var numberOfJuniorStaffMembers = _configuration.GetValue<int>(staffSet + ":Junior");
-            var numberOfMidLevelStaffMembers = _configuration.GetValue<int>(staffSet + ":MidLevel");
-            var numberOfSeniorLevelStaffMembers = _configuration.GetValue<int>(staffSet + ":Senior");
-            var numberOfTeamLeadStaffMembers = _configuration.GetValue<int>(staffSet + ":TeamLead");
-
-            //If its not an night shift (Here we have assumed that the night shift is from 10PM to 6AM)we consider the overflow staff 
-            // when calculating the capacity
-            if (currentHourOfDay >= 6 && currentHourOfDay < 22)
-            {
-                // Overflow staff has the experience level of Junior staff
-                numberOfJuniorStaffMembers += _configuration.GetValue<int>("Overflow-Staff:Junior");
-            }
-
-            int chatSessionCapacity = (int)((Math.Floor(numberOfJuniorStaffMembers * efficiencyOfJunior * maxConcurrency)
-                                    + Math.Floor(numberOfMidLevelStaffMembers * efficiencyOfMidLevel * maxConcurrency)
-                                    + Math.Floor(numberOfSeniorLevelStaffMembers * efficiencyOfSenior * maxConcurrency)
-                                    + Math.Floor(numberOfTeamLeadStaffMembers * efficiencyOfTeamLead * maxConcurrency)));
-
-            double mulitiplierFactorForMaximumQueueLength = _configuration.GetValue<double>("MulitiplierFactorForMaximumQueueLength");
-
-            ProcessorDetails processorDetails = new ProcessorDetails();
-
-            processorDetails.QueueCapacity = (int)(chatSessionCapacity * mulitiplierFactorForMaximumQueueLength);
-
-            _logger.LogInformation("Returning session capacity " + processorDetails.QueueCapacity);
-
-            return processorDetails;
-        }*/
-
+        /// <summary>
+        /// Coordinates the chat sessions in the background process
+        /// </summary>
+        /// <param name="stoppingToken"></param>
+        /// <returns></returns>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            //await ListenForIntegrationEvents(stoppingToken);
-
             await CoordinateChatsWithAgents();
-        }
+        }     
 
-       /* private async Task ListenForIntegrationEvents(CancellationToken stoppingToken)
-        {
-            _logger.LogInformation("ListenForIntegrationEvents ");
-            var factory = new ConnectionFactory
-            {
-                HostName = "localhost"
-            };
-            var connection = factory.CreateConnection();
-            using var channel = connection.CreateModel();
-            channel.QueueDeclare("sessions", exclusive: false);
-
-            var consumer = new EventingBasicConsumer(channel);
-            consumer.Received += (model, eventArgs) =>
-            {
-                var body = eventArgs.Body.ToArray();
-                var message = Encoding.UTF8.GetString(body);
-
-                _logger.LogInformation("New message received: " + message);
-
-                //channel.BasicAck(deliveryTag: eventArgs.DeliveryTag, multiple: false);
-            };
-                     
-
-            channel.BasicConsume(queue: "sessions", autoAck: true, consumer: consumer);
-
-            Console.ReadLine();
-
-        }*/
-
+        /// <summary>
+        /// Read the RabbitMQ Queue whenever a chat agent becomes availble and then start processing the request
+        /// </summary>
+        /// <returns></returns>
         private async Task CoordinateChatsWithAgents()
         {
             _logger.LogInformation("ListenForIntegrationEvents ");
@@ -163,7 +90,6 @@ namespace SupportRequestProcessor.Services
 
             while (true)
             {
-
                 if (!EvaluateWhetherChatAgentsAvailbleToHandleTheSupportRequest())
                 {
                     _logger.LogInformation("New support request cannot be accomodated as all agents are busy");
@@ -187,6 +113,15 @@ namespace SupportRequestProcessor.Services
                     _logger.LogInformation("New message received: " + message);
 
                     SupportRequest supportRequest = JsonConvert.DeserializeObject<SupportRequest>(message);
+
+                    //Check whether this new support request is flagged for deletion
+                    //A meesage is flagged for deletion when the SupportRequestAccepter does not receive 3 poll requests
+                    if (CommonVariables.SupportRequestsFlaggedForDeletion.ContainsKey(supportRequest.RequestId))
+                    {
+                        _logger.LogWarning("This request has been flagged for deletion ,hence skip processing: " + supportRequest.RequestId);
+                        CommonVariables.SupportRequestsFlaggedForDeletion.Remove(supportRequest.RequestId);
+                        continue;
+                    }
 
                     AssignSupportRequestToChatAgent(supportRequest);
 
@@ -217,7 +152,8 @@ namespace SupportRequestProcessor.Services
                 {
                     if(agent.RemainingCapacity > 0)
                     {
-                        agent.SupportRequests.Add(supportRequest);
+                        CommonVariables.SupportRequestsAssignments.Add(supportRequest.RequestId,agent);
+                        agent.SupportRequests.Add(supportRequest.RequestId, supportRequest);
                         agent.RemainingCapacity -= 1;
                         _logger.LogInformation("New support request "+ supportRequest.RequestId + " assigned to Junior Agent at position : " + nextRoundRobinJuniorAgent + " Remaining chat cpaccity for the agent : "+ agent.RemainingCapacity);
                         remainingChatCapacity--;
@@ -252,7 +188,8 @@ namespace SupportRequestProcessor.Services
                 {
                     if (agent.RemainingCapacity > 0)
                     {
-                        agent.SupportRequests.Add(supportRequest);
+                        CommonVariables.SupportRequestsAssignments.Add(supportRequest.RequestId, agent);
+                        agent.SupportRequests.Add(supportRequest.RequestId, supportRequest);
                         agent.RemainingCapacity -= 1;
                         _logger.LogInformation("New support request " + supportRequest.RequestId + " assigned to Mid-Level Agent at position : " + nextRoundRobinMidLevelAgent + " Remaining chat cpaccity for the agent : " + agent.RemainingCapacity);
                         remainingChatCapacity--;
@@ -287,7 +224,8 @@ namespace SupportRequestProcessor.Services
                 {
                     if (agent.RemainingCapacity > 0)
                     {
-                        agent.SupportRequests.Add(supportRequest);
+                        CommonVariables.SupportRequestsAssignments.Add(supportRequest.RequestId, agent);
+                        agent.SupportRequests.Add(supportRequest.RequestId, supportRequest);
                         agent.RemainingCapacity -= 1;
                         _logger.LogInformation("New support request " + supportRequest.RequestId + " assigned to Senior Agent at position : " + nextRoundRobinSeniorAgent + " Remaining chat cpaccity for the agent : " + agent.RemainingCapacity);
                         remainingChatCapacity--;
@@ -322,7 +260,8 @@ namespace SupportRequestProcessor.Services
                 {
                     if (agent.RemainingCapacity > 0)
                     {
-                        agent.SupportRequests.Add(supportRequest);
+                        CommonVariables.SupportRequestsAssignments.Add(supportRequest.RequestId, agent);
+                        agent.SupportRequests.Add(supportRequest.RequestId, supportRequest);
                         agent.RemainingCapacity -= 1;
                         _logger.LogInformation("New support request " + supportRequest.RequestId + " assigned to Lead Agent at position : " + nextRoundRobinTeamLeadAgent + " Remaining chat cpaccity for the agent : " + agent.RemainingCapacity);
                         remainingChatCapacity--;
@@ -375,7 +314,7 @@ namespace SupportRequestProcessor.Services
                 nextRoundRobinSeniorAgent = 0;
                 nextRoundRobinTeamLeadAgent = 0;
 
-                ReadConfigFIleAndRearrangeTeamCompositionAndCapacity();
+                ReadConfigFileAndRearrangeTeamCompositionAndCapacity();
             }
 
             if(remainingChatCapacity > 0)
@@ -389,7 +328,7 @@ namespace SupportRequestProcessor.Services
         /// <summary>
         /// When a shift changes this method helps to recalculate the capacities.
         /// </summary>
-        private void ReadConfigFIleAndRearrangeTeamCompositionAndCapacity()
+        private void ReadConfigFileAndRearrangeTeamCompositionAndCapacity()
         {
             var numberOfJuniorStaffMembers = _configuration.GetValue<int>(currentShift + ":Junior");
             var numberOfMidLevelStaffMembers = _configuration.GetValue<int>(currentShift + ":MidLevel");
@@ -402,6 +341,15 @@ namespace SupportRequestProcessor.Services
             var efficiencyOfTeamLead = _configuration.GetValue<double>("StaffEfficiency:TeamLead");
 
             var maxConcurrency = _configuration.GetValue<int>("MaximumConcurrency");
+
+            //If its not an night shift if office hours - Shift 1 and 2 (Here we have assumed that the night shift is from 10PM to 6AM)we consider the overflow staff 
+            // when calculating the capacity
+            if (!String.Equals(currentShift,SHIFT_3))
+            {
+                // Overflow staff has the experience level of Junior staff
+                numberOfJuniorStaffMembers += _configuration.GetValue<int>("Overflow-Staff:Junior");
+            }
+
 
             for (int i = 0; i < numberOfJuniorStaffMembers; i++)
             {

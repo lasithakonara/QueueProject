@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 
 namespace SupportRequestProcessor.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
     public class ChatController : ControllerBase
     {
@@ -22,8 +21,7 @@ namespace SupportRequestProcessor.Controllers
             _logger = loggerFactory.CreateLogger("ChatController");
         }
 
-        // GET: api/<ChatController>
-        [HttpGet, Route("api/v1/maxQueueLength")]
+        [HttpGet, Route("api/v1/MaxQueueLength")]
         public ProcessorDetails GetMaxQueueLength()
         {
             ProcessorDetails processorDetails = _supportRequestProcessorService.GetMaxQueueLength();
@@ -31,6 +29,12 @@ namespace SupportRequestProcessor.Controllers
             return processorDetails;
         }
 
-       
+        [HttpGet, Route("api/v1/FlagSupportRequestForDeletion")]
+        public async Task<IActionResult> FlagSupportRequestForDeletion(string requestId)
+        {
+            _logger.LogInformation("FlagSupportRequestForDeletion : " + requestId);
+            _supportRequestProcessorService.FlagSupportRequestForDeletion(requestId);
+            return Ok();
+        }
     }
 }
