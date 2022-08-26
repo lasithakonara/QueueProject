@@ -35,7 +35,7 @@ namespace SupportRequestProcessor.Services
                     CommonVariables.SupportRequestsAssignments[requestId].RemainingCapacity++;
                 } 
                 CommonVariables.SupportRequestsAssignments.Remove(requestId);
-                _logger.LogInformation("Removing currently processing reqeust from agent as polling has failed : " + requestId);
+                _logger.LogInformation("Removed currently processing reqeust from agent as polling has been failed : " + requestId);
                 return;
             }
 

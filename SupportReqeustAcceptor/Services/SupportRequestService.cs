@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using SharedLibrary;
 using SharedModels;
@@ -15,12 +16,14 @@ namespace SupportReqeustAcceptor.Services
         private readonly IMessagePublisher _messagePublisher;
         private readonly ILogger _logger;
         private readonly IHttpClientFactory _httpClientFactory;
-        private int myint = 0; 
-        public SupportRequestService(IMessagePublisher messageProducer, ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory)
+        private readonly IConfiguration _configuration;
+
+        public SupportRequestService(IMessagePublisher messageProducer, ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _messagePublisher = messageProducer;
             _logger = loggerFactory.CreateLogger("SupportRequestService");
             _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -37,7 +40,7 @@ namespace SupportReqeustAcceptor.Services
             var httpRequestMessage = new HttpRequestMessage
             {
                 Method = HttpMethod.Get,
-                RequestUri = new Uri("https://localhost:44366/api/v1/MaxQueueLength")
+                RequestUri = new Uri(_configuration.GetValue<string>("SupportRequestProsessorUrl")+"api/v1/MaxQueueLength")
             };
 
             var httpClient = _httpClientFactory.CreateClient("SupportRequestClient");

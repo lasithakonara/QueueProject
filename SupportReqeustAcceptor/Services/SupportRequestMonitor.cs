@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SupportReqeustAcceptor.Common;
 using System;
@@ -13,10 +14,12 @@ namespace SupportReqeustAcceptor.Services
     {
         private readonly ILogger _logger;
         private readonly IHttpClientFactory _httpClientFactory;
-        public SupportRequestMonitor(ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory)
+        private readonly IConfiguration _configuration;
+        public SupportRequestMonitor(ILoggerFactory loggerFactory, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _logger = loggerFactory.CreateLogger("SupportRequestMonitorService");
             _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -31,7 +34,7 @@ namespace SupportReqeustAcceptor.Services
                 foreach (KeyValuePair<string, DateTime> supportRequest in CommonVariables.SupportRequests)
                 {
                     var currentTime = DateTime.UtcNow;
-                    var lastPollingTime = supportRequest.Value.AddSeconds(3);
+                    var lastPollingTime = supportRequest.Value.AddSeconds(_configuration.GetValue<int>("MaximumAllowedMissedPollingCount"));
                     if (currentTime > lastPollingTime)
                     {
                         _logger.LogError("Found support reqeust for which we did not receive 3 poll requests ");
@@ -54,7 +57,7 @@ namespace SupportReqeustAcceptor.Services
             var httpRequestMessage = new HttpRequestMessage
             {
                 Method = HttpMethod.Get,
-                RequestUri = new Uri("https://localhost:44366/api/v1/FlagSupportRequestForDeletion?requestId=" + requestId)
+                RequestUri = new Uri(_configuration.GetValue<string>("SupportRequestProsessorUrl") +"api/v1/FlagSupportRequestForDeletion?requestId=" + requestId)
             };
 
             var httpClient = _httpClientFactory.CreateClient("SupportRequestClient");
